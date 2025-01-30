@@ -1,6 +1,6 @@
 telegram_token: "8077243201:AAEWvkdPDfsrSKy6ZDnbfhkJOjM9sySt2PA"
 openai_api_key: "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"
-openai_api_base: "https://api.groq.com/openai/v1/chat/completions"  # leave null to use default api base or you can put your own base url here
+openai_api_base: "https://api.groq.com/openai/v1"  # leave null to use default api base or you can put your own base url here
 allowed_telegram_usernames: [5960968099]  # if empty, the bot is available to anyone. pass a username string to allow it and/or user ids as positive integers and/or channel ids as negative integers
 new_dialog_timeout: 600  # new dialog starts after timeout (in seconds)
 return_n_generated_images: 1
