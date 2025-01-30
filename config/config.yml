@@ -1,7 +1,7 @@
 telegram_token: "8077243201:AAEWvkdPDfsrSKy6ZDnbfhkJOjM9sySt2PA"
 openai_api_key: "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"
-openai_api_base: null  # leave null to use default api base or you can put your own base url here
-allowed_telegram_usernames: []  # if empty, the bot is available to anyone. pass a username string to allow it and/or user ids as positive integers and/or channel ids as negative integers
+openai_api_base: "https://api.openai.com/v1/"  # leave null to use default api base or you can put your own base url here
+allowed_telegram_usernames: [@interstellarXd]  # if empty, the bot is available to anyone. pass a username string to allow it and/or user ids as positive integers and/or channel ids as negative integers
 new_dialog_timeout: 600  # new dialog starts after timeout (in seconds)
 return_n_generated_images: 1
 n_chat_modes_per_page: 5
