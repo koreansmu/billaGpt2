@@ -129,27 +129,24 @@ async def is_bot_mentioned(update: Update, context: CallbackContext):
      except:
          return True
      else:
-         return False
 
-
-@app.on_message(filters.text & ~filters.command())  # Handles non-command messages
-async def chat(client, message):
-    user_message = message.text  # Extract message text from the user
+# Define the message handler for text messages with fallback
+async def message_handle(update: Update, context):
+    user_message = update.message.text  # Extract the message text
     
     try:
         # Attempt to get a response from the external API or fallback to OpenAI if it fails
         response = await chatgpt.send_message(user_message)
         
         # Send the response back to the user
-        await message.reply(response)
+        await update.message.reply(response)
     
     except Exception as e:
         # Log the error if something goes wrong
         logging.error(f"Error processing message: {e}")
         
         # Reply to the user with a fallback error message
-        await message.reply("Sorry, there was an issue processing your message. Please try again later.")
-
+        await update.message.reply("Sorry, there was an issue processing your message. Please try again later.")
 
 async def start_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
