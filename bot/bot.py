@@ -129,10 +129,11 @@ async def is_bot_mentioned(update: Update, context: CallbackContext):
      except:
          return True
      else:
+         return False
 
 # Define the message handler for text messages with fallback
 async def message_handle(update: Update, context):
-    user_message = update.message.text  # Extract the message text
+    user_message = update.message.text  # Extract the text message
     
     try:
         # Attempt to get a response from the external API or fallback to OpenAI if it fails
@@ -147,6 +148,7 @@ async def message_handle(update: Update, context):
         
         # Reply to the user with a fallback error message
         await update.message.reply("Sorry, there was an issue processing your message. Please try again later.")
+
 
 async def start_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
