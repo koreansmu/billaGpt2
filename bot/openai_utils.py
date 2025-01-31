@@ -13,12 +13,6 @@ if config.openai_api_base is not None:
     openai.api_base = config.openai_api_base
 logger = logging.getLogger(__name__)
 
-# API URL and headers for the external API
-API_URL = "https://ar-api-08uk.onrender.com/chat/v1"
-API_HEADERS = {"Content-Type": "application/json"}
-
-# Define the API request timeout
-API_TIMEOUT = 60.0
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.7,
@@ -32,69 +26,60 @@ OPENAI_COMPLETION_OPTIONS = {
 
 class ChatGPT:
     def __init__(self, model="gpt-3.5-turbo"):
-        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4o", "gpt-4-1106-preview", "gpt-4-vision-preview"}, f"Unknown model: {model}"
         self.model = model
+        self.logger = logging.getLogger(__name__)
 
     async def send_message(self, message, dialog_messages=[], chat_mode="assistant"):
         if chat_mode not in config.chat_modes.keys():
             raise ValueError(f"Chat mode {chat_mode} is not supported")
 
-        # Try using the external API first
-        data = {"userMessage": message}
+        # Step 1: Try external API
         try:
-            response = requests.post(API_URL, headers=API_HEADERS, json=data, timeout=API_TIMEOUT)
-            response.raise_for_status()  # Raise an exception for bad HTTP status codes
-
+            external_api_response = self.call_external_api(message)
+            if external_api_response:
+                return external_api_response
+        except Exception as e:
+            self.logger.error(f"External API failed: {e}")
+        
+        # Step 2: Fallback to OpenAI API if external API fails
+        return await self.call_openai_api(message, dialog_messages, chat_mode)
+    
+    def call_external_api(self, message):
+        """This function calls your external API (such as your custom API)"""
+        try:
+            url = "https://ar-api-08uk.onrender.com/chat/v1"
+            headers = {"Content-Type": "application/json"}
+            data = {"userMessage": message}
+            response = requests.post(url, headers=headers, json=data)
+            
+            # Check if external API was successful
             if response.status_code == 200:
-                response_data = response.json()
-                if 'response' in response_data:
-                    return response_data['response'], None, 0  # Returning the response message
-                else:
-                    raise ValueError("Error: No response in the API data.")
+                api_response = response.json()
+                return api_response.get("response", "")  # Or handle as per the API response
             else:
-                raise ValueError(f"Error: Received unexpected status code {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"External API request failed: {e}")
+                raise Exception(f"External API returned error: {response.status_code}")
+        
+        except Exception as e:
+            raise Exception(f"Failed to call external API: {e}")
+    
+    async def call_openai_api(self, message, dialog_messages, chat_mode):
+        """This function calls the OpenAI API if the external API fails."""
+        try:
+            if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4o", "gpt-4-1106-preview"}:
+                messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
+                r = await openai.ChatCompletion.acreate(
+                    model=self.model,
+                    messages=messages,
+                    **OPENAI_COMPLETION_OPTIONS
+                )
+                answer = r.choices[0].message["content"]
+            else:
+                raise ValueError(f"Unknown model: {self.model}")
 
-            # If the external API fails, fall back to OpenAI's model
-            return await self._send_message_openai(message, dialog_messages, chat_mode)
-
-    async def _send_message_openai(self, message, dialog_messages, chat_mode):
-        """ Helper function to use OpenAI's API if external API fails """
-        answer = None
-        while answer is None:
-            try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4o", "gpt-4-1106-preview"}:
-                    messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
-
-                    r = await openai.ChatCompletion.acreate(
-                        model=self.model,
-                        messages=messages,
-                        **OPENAI_COMPLETION_OPTIONS
-                    )
-                    answer = r.choices[0].message["content"]
-                elif self.model == "text-davinci-003":
-                    prompt = self._generate_prompt(message, dialog_messages, chat_mode)
-                    r = await openai.Completion.acreate(
-                        engine=self.model,
-                        prompt=prompt,
-                        **OPENAI_COMPLETION_OPTIONS
-                    )
-                    answer = r.choices[0].text
-                else:
-                    raise ValueError(f"Unknown model: {self.model}")
-
-                answer = self._postprocess_answer(answer)
-                n_input_tokens, n_output_tokens = r.usage.prompt_tokens, r.usage.completion_tokens
-            except openai.error.InvalidRequestError as e:  # too many tokens
-                if len(dialog_messages) == 0:
-                    raise ValueError("Dialog messages is reduced to zero, but still has too many tokens to make completion") from e
-
-                # forget first message in dialog_messages
-                dialog_messages = dialog_messages[1:]
-
-        return answer, (n_input_tokens, n_output_tokens), 0
-
+            return answer  # Return OpenAI's response
+        except Exception as e:
+            self.logger.error(f"Failed to call OpenAI API: {e}")
+            return "Sorry, something went wrong."
     # Other methods remain the same...
 
     def _generate_prompt(self, message, dialog_messages, chat_mode):
@@ -118,15 +103,20 @@ class ChatGPT:
         return base64.b64encode(image_buffer.read()).decode("utf-8")
 
     def _generate_prompt_messages(self, message, dialog_messages, chat_mode, image_buffer: BytesIO = None):
+        # Start with the system prompt based on the selected chat mode.
         prompt = config.chat_modes[chat_mode]["prompt_start"]
 
+        # Initialize the list of messages.
         messages = [{"role": "system", "content": prompt}]
         
+        # Add all previous dialog messages (user and bot interactions).
         for dialog_message in dialog_messages:
             messages.append({"role": "user", "content": dialog_message["user"]})
             messages.append({"role": "assistant", "content": dialog_message["bot"]})
                     
+        # Check if an image was provided.
         if image_buffer is not None:
+            # If there's an image, append the message content including the text and image.
             messages.append(
                 {
                     "role": "user", 
@@ -137,17 +127,16 @@ class ChatGPT:
                         },
                         {
                             "type": "image_url",
-                            "image_url" : {
-                              
+                            "image_url": {
                                 "url": f"data:image/jpeg;base64,{self._encode_image(image_buffer)}",
-                                "detail":"high"
+                                "detail": "high"  # or any other detail level you need
                             }
                         }
                     ]
                 }
-                
             )
         else:
+            # If there's no image, just add the text message as usual.
             messages.append({"role": "user", "content": message})
 
         return messages
